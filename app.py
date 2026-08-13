@@ -15,7 +15,8 @@ DATA.mkdir(exist_ok=True)
 
 @st.cache_data
 def load_demo():
-    return pd.read_csv(DATA / "demo_players.csv")
+    return pd.read_csv(Path(__file__).parent / "demo_players.csv")
+
 
 def fp(row, ppr=1.0, pass_td=4.0):
     return (
