@@ -1,0 +1,8 @@
+Gate,Pass,Evidence,Status
+Monotonic severity,True,Median rank-drop rises with severity,PASS
+Questionable restraint,True,Median drop 8.0,PASS
+Questionable elite retention,True,Top-12 retention 60.0%,PASS
+Doubtful meaningful downgrade,True,Median drop 11.0,PASS
+Out major downgrade,True,Median drop 22.0,PASS
+PUP stronger than Out,True,PUP 31.0 vs Out 22.0,PASS
+IR exclusion,True,IR remains hard-excluded from recommendations,PASS
