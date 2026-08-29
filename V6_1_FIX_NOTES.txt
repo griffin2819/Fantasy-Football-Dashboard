@@ -1,0 +1,14 @@
+Fantasy Edge V6.1 Benchmark Stability Fix
+
+Why the screenshot happened:
+- V6 routed automated picks through the full production preparation pipeline.
+- That restored parity, but it also made each simulated draft far too expensive.
+- Four drafts took ~170 seconds and all four failed before any successful result was preserved.
+
+Changes:
+- Added benchmark candidate prefilter preserving market leaders and top candidates at every position by projection, VORP, draft score, and IDP quality.
+- The actual choice still runs through prepare_user_draft_candidates and the production final scorer.
+- Reduced benchmark workers to 1 to avoid CPU contention on Streamlit Cloud.
+- Failure details now expand automatically.
+- No-eligible errors now report round, overall pick, roster counts, and remaining position pool.
+- V6 quality/model-edge/legality changes remain intact.
