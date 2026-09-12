@@ -14,9 +14,9 @@ from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 APP_DIR = Path(__file__).resolve().parent
-APP_VERSION = "7.78"
+APP_VERSION = "7.80"
 V651_BUILD_ID = "V7.43-ROLE-CONFIDENCE-DIAGNOSTICS"
-st.set_page_config(page_title=f"Fantasy Edge V{APP_VERSION} — True Lazy Navigation", page_icon="🏈", layout="wide")
+st.set_page_config(page_title=f"Fantasy Edge V{APP_VERSION} — Fast Snapshot Router", page_icon="🏈", layout="wide")
 st.markdown("""
 <style>
 /* V7.54 compact unified Fantasy Edge shell — presentation only */
@@ -7766,7 +7766,7 @@ state.setdefault("recommendation_history",[])
 st.title("🏈 Fantasy Edge")
 st.caption("Unified live-draft and mock-draft engine • 12-team snake • exact league construction")
 st.caption("Fantasy Edge draft engine")
-st.caption("⚡ True lazy navigation • selected page only • live data refresh is manual")
+st.caption("⚡ Fast snapshot router • tab changes never call live providers • refresh is manual")
 
 with st.sidebar:
     st.header("Yahoo league settings")
@@ -8057,13 +8057,17 @@ if _add:
     board=pd.concat([board,pd.DataFrame(_add)],ignore_index=True,sort=False)
     board=board.drop_duplicates(subset=["key"],keep="first").reset_index(drop=True)
 
-# V6.46 authoritative final projection pass. The packaged/top-300/production
-# universe is finalized FIRST; published projections are then overlaid onto that
-# complete universe. This prevents a later pool merge from reintroducing players
-# (such as J.K. Dobbins) with stale rank-derived projection/VORP values.
-board,_v646_projection_matches,_v646_projection_error=_v645_apply_published_projections(
-    board,ppr,teams,state["roster_slots"]
-)
+# V7.80 PERFORMANCE: the authoritative published-projection overlay is REFRESH ONLY.
+# V7.79 accidentally ran this provider pass a second time on every page click,
+# defeating snapshot navigation and causing long blank screens. A saved snapshot
+# already contains certified projections/VORP and must be trusted as-is.
+if _refresh_live or not _v778_snapshot_loaded:
+    board,_v646_projection_matches,_v646_projection_error=_v645_apply_published_projections(
+        board,ppr,teams,state["roster_slots"]
+    )
+else:
+    _v646_projection_matches=0
+    _v646_projection_error="snapshot navigation — provider overlay skipped"
 # V6.59 targeted published fallback for a newly rosterable player when the live
 # bulk endpoint has not indexed him yet. FantasyPros 2026 PPR: 87.9 season pts.
 _jkl=board["player"].astype(str).map(norm).eq(norm("Ja'Kobi Lane"))
@@ -11610,15 +11614,16 @@ else:
     else:
         board,_v693_scarcity=_v693_attach_scarcity(board,state)
 
-# V7.44 IMPORTANT: V7.43 calculated role confidence before external projections were
-# attached, so the strongest pregame signal could never contribute. Recompute confidence
-# after the external merge while leaving observed usage fields untouched.
-try:
-    _v744_rc=board.apply(_v743_role_confidence,axis=1)
-    board["_role_confidence"]=[x[0] for x in _v744_rc]
-    board["_role_confidence_source"]=[x[1] for x in _v744_rc]
-except Exception:
-    pass
+# V7.80 PERFORMANCE: recompute role confidence only during an explicit refresh or
+# when the local fallback board genuinely lacks it. Certified snapshots already
+# persist these fields, so a tab click must not trigger another full-board apply().
+if _refresh_live or "_role_confidence" not in board.columns:
+    try:
+        _v744_rc=board.apply(_v743_role_confidence,axis=1)
+        board["_role_confidence"]=[x[0] for x in _v744_rc]
+        board["_role_confidence_source"]=[x[1] for x in _v744_rc]
+    except Exception:
+        pass
 
 # Persist the fully refreshed board into cloud-synced state so future deployments
 # and page clicks can render instantly without repeating live requests.
@@ -12398,7 +12403,7 @@ try:
         board["fe_calibrated_confidence"]=board.apply(lambda r:_v756_calibrated_confidence(r,_hist756,state),axis=1)
         board["fe_news_impact"]=board.apply(_v756_news_impact,axis=1)
     # Compute diagnostics only on pages that display them.
-    if _v777_page_idx in (8,11,12,13,14):
+    if _v777_page_idx in (8,11,12,13):
         _v755_quality=_v755_quality_flags(board)
         _v755_scarcity=_v755_league_context(board,state)
         _v756_stale=_v756_stale_flags(board,state_snapshot=state,actionable_only=True)
@@ -16402,21 +16407,44 @@ def _v735_contingency(board_df,state,news_df):
 if _v777_page_idx==14:
     st.caption("⚡ Fast page mode: rendering from saved weekly snapshot. Full trade search is deferred to Trade Finder.")
     if _v779_render_started is not None:
-        st.caption(f"Page shell ready in {time.perf_counter()-_v779_render_started:.2f}s")
+        st.caption(f"⚡ Action Queue shell: {time.perf_counter()-_v779_render_started:.2f}s")
     my=board[board["player"].map(lambda n:_player_owner(state,n)=="1")].copy()
     if my.empty:
         st.subheader("🏠 Fantasy Edge Command Center")
         st.info("Set your roster under League Setup to activate the Command Center.")
     else:
         starters,bench,lineup=_v676_optimize_lineup(my)
-        _v775_feed=_v775_unified_decisions(board,state,12,include_trade_scan=False)
+        # V7.80: Action Queue uses a snapshot-scoped decision cache.  Page switches
+        # never rerun the arbiter/certifier when the weekly snapshot is unchanged.
+        _v780_snap_key=str((_v778_snapshot_meta or {}).get("updated", "local"))
+        _v780_cache=st.session_state.get("_v780_action_cache",{}) or {}
+        if _v780_cache.get("snapshot_key")==_v780_snap_key:
+            _v775_feed=pd.DataFrame(_v780_cache.get("feed",[]))
+        else:
+            _v775_feed=_v775_unified_decisions(board,state,12,include_trade_scan=False)
         _actions=[]
         if isinstance(_v775_feed,pd.DataFrame) and len(_v775_feed):
             for _,_a in _v775_feed[_v775_feed["Tier"].eq("DO NOW")].iterrows():
                 _urg=95 if str(_a.get("Area",""))=="AVAILABILITY" else (88 if str(_a.get("Area","")) in ("START/SIT","WAIVER") else 76)
                 _actions.append((_urg,str(_a.get("Area","")),str(_a.get("Action","")),f"{float(_a.get('Week Impact',0) or 0):+.2f} wk • {int(float(_a.get('Confidence',0) or 0))}% conf"))
-        _monitors=_v761_monitor_queue(board,state)
-        _overall,_cert=_v756_certify(board,state)
+        if _v780_cache.get("snapshot_key")==_v780_snap_key:
+            _monitors=_v780_cache.get("monitors",[]) or []
+            _overall=str(_v780_cache.get("overall","READY"))
+            _cert=pd.DataFrame(_v780_cache.get("cert",[]))
+        else:
+            _monitors=_v761_monitor_queue(board,state)
+            _overall,_cert=_v756_certify(board,state)
+            try:
+                _v780_new_cache={
+                    "snapshot_key":_v780_snap_key,
+                    "feed":_v775_feed.replace({np.nan:None}).to_dict("records") if isinstance(_v775_feed,pd.DataFrame) else [],
+                    "monitors":_monitors,
+                    "overall":_overall,
+                    "cert":_cert.replace({np.nan:None}).to_dict("records") if isinstance(_cert,pd.DataFrame) else [],
+                }
+                st.session_state["_v780_action_cache"]=_v780_new_cache
+            except Exception:
+                pass
         _season756=int(_v678_live_week.get("season",datetime.now().year)); _week756=int(_v678_live_week.get("week",1))
         _starter_names=set(starters.get("Player",pd.Series(dtype=str)).astype(str).tolist()) if isinstance(starters,pd.DataFrame) else set()
 
