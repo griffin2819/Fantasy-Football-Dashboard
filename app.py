@@ -14,7 +14,7 @@ from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 APP_DIR = Path(__file__).resolve().parent
-APP_VERSION = "8.02"
+APP_VERSION = "8.03"
 V651_BUILD_ID = "V7.43-ROLE-CONFIDENCE-DIAGNOSTICS"
 st.set_page_config(page_title=f"Fantasy Edge V{APP_VERSION} — Resilient Weekly Refresh", page_icon="🏈", layout="wide")
 st.markdown("""
@@ -426,22 +426,22 @@ def market_rankings(ppr):
     try:
         # DynastyProcess publishes the CSV version of the same FantasyPros
         # rankings feed. Read it directly without a separately installed module.
-        url="https://github.com/dynastyprocess/data/raw/master/files/db_fpecr.csv.gz"
-        # Pandas' URL reader has no request timeout and can leave the whole app
-        # spinning for minutes. Bound the transfer and parse only needed fields.
+        # Publisher recommends Parquet for Python. Column selection avoids
+        # materializing the enormous historical CSV archive on a small host.
+        url="https://github.com/dynastyprocess/data/raw/master/files/db_fpecr.parquet"
         payload=io.BytesIO()
         started=time.monotonic()
-        with requests.get(url,stream=True,timeout=(6,12),headers={"User-Agent":"FantasyEdge/8.02"}) as response:
+        with requests.get(url,stream=True,timeout=(6,12),headers={"User-Agent":"FantasyEdge/8.03"}) as response:
             response.raise_for_status()
             for chunk in response.iter_content(chunk_size=262144):
-                if time.monotonic()-started>45:
-                    raise TimeoutError("Consensus archive download exceeded 45 seconds")
+                if time.monotonic()-started>35:
+                    raise TimeoutError("Consensus Parquet download exceeded 35 seconds")
                 payload.write(chunk)
                 if payload.tell()>64*1024*1024:
-                    raise RuntimeError("Consensus archive exceeds 64 MB download limit")
+                    raise RuntimeError("Consensus Parquet exceeds 64 MB download limit")
         payload.seek(0)
-        fields={"scrape_date","player","pos","ecr","page_type","fp_page","ecr_type"}
-        raw=pd.read_csv(payload,compression="gzip",low_memory=False,usecols=lambda c:c in fields)
+        fields=["scrape_date","player","pos","ecr","page_type","fp_page","ecr_type"]
+        raw=pd.read_parquet(payload,columns=fields)
         if "scrape_date" not in raw.columns:
             raise RuntimeError("Consensus archive has no scrape_date; refusing undated rankings")
         date=pd.to_datetime(raw["scrape_date"],errors="coerce",utc=True)
@@ -7849,6 +7849,8 @@ st.title("🏈 Fantasy Edge")
 st.caption("Unified live-draft and mock-draft engine • 12-team snake • exact league construction")
 st.caption("Fantasy Edge draft engine")
 st.caption("⚡ Fragment navigation active • page switches rerun only the selected page • refresh is manual")
+_v803_startup=st.empty()
+_v803_startup.caption("Loading saved board and page controls…")
 
 with st.sidebar:
     st.header("Yahoo league settings")
@@ -8098,6 +8100,7 @@ def _v778_fast_context_defaults(df):
     return out
 
 _v778_snapshot_blob=state.get("_weekly_board_snapshot_gz","") or ""
+_v803_startup.caption("Loading saved weekly snapshot…")
 _v778_snapshot_board=_v778_snapshot_decode(_v778_snapshot_blob)
 _v778_snapshot_meta=state.get("_weekly_board_snapshot_meta",{}) or {}
 _v778_snapshot_loaded=bool(isinstance(_v778_snapshot_board,pd.DataFrame) and len(_v778_snapshot_board))
@@ -8127,6 +8130,7 @@ if _refresh_live:
     # then improve it source-by-source. This fixes the old all-or-nothing refresh path
     # where an nflverse/history failure silently discarded a successful Sleeper team
     # directory and left Waivers with team="NFL" and 0% coverage.
+    _v803_startup.info("Updating live data; the current saved board remains available after refresh.")
     with st.spinner("Refreshing weekly data once…"):
         _v802_progress=st.empty()
         _v802_progress.info("Refresh step 1/5: player directory")
@@ -17390,4 +17394,5 @@ def _v781_navigation_fragment():
             with st.expander("Technical details"):
                 st.exception(_page_exc)
 
+_v803_startup.empty()
 _v781_navigation_fragment()
