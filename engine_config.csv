@@ -1,0 +1,10 @@
+Field,Value
+Engine_version,v9.08
+Champion_state,FROZEN
+Default_weights,"(16, 2, 0.2, 0.5)"
+Round_2_weights,"(1, 0, 0, 0)"
+Round_3_weights,"(1, 0, 0.2, 0.25)"
+Round_4_weights,"(0, 0, 1.2, 2)"
+Round_5_weights,"(2, 2, 1.2, 2)"
+Round_6_weights,"(0, 8, 1.2, 2)"
+Round_15_weights,"(0, 0, 0, 0)"
