@@ -1,0 +1,6 @@
+Gate,Pass,Evidence,Status
+Replay coverage,True,18000/18000,PASS
+Exact champion fidelity,True,86.267% >=80%,PASS
+Effective decision fidelity,True,99.300% >=95%,PASS
+Harmful disagreement containment,True,0.700% <=5%,PASS
+Per-round effective floor,True,95.917% in R1 >=90%,PASS
